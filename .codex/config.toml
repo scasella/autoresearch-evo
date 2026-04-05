@@ -1,0 +1,6 @@
+# Treat the original autoresearch instructions file as project guidance.
+project_doc_fallback_filenames = ["program.md"]
+project_doc_max_bytes = 65536
+
+[features]
+codex_hooks = true
