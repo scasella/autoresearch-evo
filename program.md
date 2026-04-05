@@ -12,6 +12,18 @@ The repo still follows the original autoresearch contract:
 
 What changes in this version is the **research organization** around the loop. Codex now has repo-local hooks that maintain search memory, select the next search role, parse runs, preserve stepping stones, and continue the loop automatically. Treat the hook-produced guidance as part of the research protocol.
 
+## GPU execution
+
+Anything in this repo that requires a GPU should be routed through the `$modal-gpu` skill instead of assuming local CUDA access. That includes experiments, CUDA sanity checks, GPU debugging, training smoke tests, and benchmarks.
+
+When GPU work is needed, follow the `$modal-gpu` workflow:
+
+1. Verify Modal install and auth.
+2. Ensure the repo-local runner contract is available (`scripts/modal_gpu.py`).
+3. Run a cheap CUDA sanity check first.
+4. Launch the target command through the Modal GPU runner with an explicit GPU type and timeout.
+5. Report evidence and clean up any remote sandboxes.
+
 ## Setup
 
 To set up a new experiment, work with the user to:
@@ -28,10 +40,10 @@ To set up a new experiment, work with the user to:
 
 ## Experimentation
 
-Each experiment runs on a single GPU. The training script runs for a **fixed time budget of 5 minutes** (wall clock training time, excluding startup and compilation). Launch it as:
+Each experiment runs on a single GPU. Use `$modal-gpu` for experiment execution and any other GPU-bound task. The training script still runs for a **fixed time budget of 5 minutes** (wall clock training time, excluding startup and compilation). Once the repo-local Modal runner exists, launch experiments like this so `run.log` stays local for the hooks:
 
 ```bash
-uv run train.py > run.log 2>&1
+python scripts/modal_gpu.py -- uv run train.py > run.log 2>&1
 ```
 
 ### What you CAN do
@@ -94,7 +106,7 @@ The hooks can infer metadata if needed, but a structured message makes the archi
 
 ### Use the hook review as the primary post-run analysis
 
-After `uv run train.py > run.log 2>&1`, the post-tool hook will parse the run and return a structured discovery review. That review includes:
+After `python scripts/modal_gpu.py -- uv run train.py > run.log 2>&1`, the post-tool hook will parse `run.log` and return a structured discovery review. That review includes:
 
 - parsed metrics
 - category / niche classification
@@ -171,7 +183,7 @@ LOOP FOREVER:
 2. Read the latest hook context: current phase, active emitter, target niche, and anti-patterns.
 3. Tune `train.py` with **one** coherent experimental idea.
 4. Commit the candidate.
-5. Run the experiment: `uv run train.py > run.log 2>&1`.
+5. Run the experiment through `$modal-gpu`: `python scripts/modal_gpu.py -- uv run train.py > run.log 2>&1`.
 6. Read the hook-generated discovery review.
 7. If the run crashed, inspect the tail of `run.log` only as needed to diagnose the error.
 8. Record the result in `results.tsv`.
