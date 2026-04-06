@@ -1,14 +1,18 @@
 # autoresearch-evo
 
-A novelty/evolutionary-search-oriented fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch).
+A fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch) that keeps the same tiny 5-minute `train.py` benchmark, but gives the research loop memory, multiple search styles, and autonomous review so it can search more broadly than plain hill-climbing.
 
-This fork keeps the original spirit of the project, a single small LLM training loop that an agent can perturb autonomously under a fixed 5-minute budget, but adds a lightweight discovery control plane around that loop:
+Instead of treating each run as an isolated local tweak, this fork tries to make the loop behave more like a lightweight research system:
 
-- emitter-based mutation selection instead of a single hill-climbing style
-- archive/niche memory so stepping stones are not immediately forgotten
-- conjecture and crash memory carried between turns
-- hook-driven autonomous continuation on `autoresearch/*` branches
-- a repo-local experiment runner with an optional remote GPU backend
+- it explores through multiple mutation styles instead of only one local-tuning behavior
+- it remembers near-misses, crashes, and stepping stones instead of forgetting them immediately
+- it reviews each run and feeds that evidence back into the next decision
+- it can keep operating autonomously on a dedicated research branch
+- it still preserves the same simple public benchmark: one file, one metric, one 5-minute run
+
+At this release cut, that loop improved the baseline from `0.997426` to `0.985596` `val_bpb` under the same benchmark contract.
+
+This is a heuristic multi-emitter discovery control plane, not a formal evolutionary algorithm framework. The goal is still pragmatic: help one small autoresearch loop search more intelligently without bloating the repo.
 
 The public branch is curated to keep only the intentional fork surface: the control-plane, the runner, tests, the best validated `train.py` found in our run history, and release charts summarizing the search.
 
@@ -25,17 +29,15 @@ This repo keeps that contract. The benchmark is still the same 5-minute `train.p
 
 ## What This Fork Adds
 
-The main addition is a small repo-local discovery layer:
+The main value-add is a repo-local discovery layer that changes how the loop searches:
 
-- `.codex/hooks.json` wires session-start, prompt-submit, pre-tool, post-tool, and stop-time hooks
-- `research/` stores the shared state/update logic for archive memory, emitter selection, and run review
-- `scripts/run_experiment.py` is the generic repo-local experiment runner
-- `scripts/backends/modal_backend.py` contains the optional Modal remote-GPU backend
-- `scripts/modal_gpu.py` remains as a compatibility shim for the Modal backend
-- `program.md` defines the agent-facing research protocol
-- `tests/` covers the control-plane and runner behavior with stdlib-only unit tests
+- **Broader search than hill-climbing.** The loop chooses among several mutation styles instead of repeating one kind of local tweak.
+- **Persistent research memory.** Near-misses, crashes, archive elites, and selected conjectures carry across turns.
+- **Structured run review.** Every completed run is parsed and scored for fitness, novelty, information gain, and surprise before the next step is chosen.
+- **Autonomous continuation.** Repo-local hooks can keep the loop moving on `autoresearch/*` branches without turning the repo into a heavyweight framework.
+- **Optional remote backend.** A generic repo runner supports a local path by default and an optional remote GPU backend when local hardware is not the target environment.
 
-The search loop chooses among:
+The emitter portfolio is:
 
 - `local_tuner`
 - `optimizer_hacker`
@@ -44,6 +46,8 @@ The search loop chooses among:
 - `contrarian`
 - `recombinator`
 - `anomaly_chaser`
+
+Under the hood, the core implementation lives in `.codex/`, `research/`, and the repo-local runner scripts, but the intended public mental model stays small: `prepare.py`, `train.py`, `program.md`, and a loop that now searches with memory.
 
 ## Best Validated Configuration Shipped Here
 
