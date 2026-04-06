@@ -1,6 +1,6 @@
 # autoresearch-evo
 
-A fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch) that keeps the same tiny 5-minute `train.py` benchmark, but gives the research loop memory, multiple search styles, and autonomous review so it can search more broadly than plain hill-climbing.
+A fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch) that keeps the same tiny 5-minute `train.py` benchmark, but gives the research loop memory, novelty-search-inspired exploration, and autonomous review so it can search more broadly than plain hill-climbing.
 
 Instead of treating each run as an isolated local tweak, this fork tries to make the loop behave more like a lightweight research system:
 
@@ -12,7 +12,7 @@ Instead of treating each run as an isolated local tweak, this fork tries to make
 
 At this release cut, that loop improved the baseline from `0.997426` to `0.985596` `val_bpb` under the same benchmark contract.
 
-This is a heuristic multi-emitter discovery control plane, not a formal evolutionary algorithm framework. The goal is still pragmatic: help one small autoresearch loop search more intelligently without bloating the repo.
+This is a heuristic discovery control plane with novelty-search-inspired exploration, not a formal evolutionary algorithm framework. The goal is still pragmatic: help one small autoresearch loop search more intelligently without bloating the repo.
 
 The public branch is curated to keep only the intentional fork surface: the control-plane, the runner, tests, the best validated `train.py` found in our run history, and release charts summarizing the search.
 
