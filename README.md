@@ -1,126 +1,143 @@
-# autoresearch
+# autoresearch-evo
 
-![teaser](progress.png)
+A novelty/evolutionary-search-oriented fork of [karpathy/autoresearch](https://github.com/karpathy/autoresearch).
 
-*One day, frontier AI research used to be done by meat computers in between eating, sleeping, having other fun, and synchronizing once in a while using sound wave interconnect in the ritual of "group meeting". That era is long gone. Research is now entirely the domain of autonomous swarms of AI agents running across compute cluster megastructures in the skies.
+This fork keeps the original spirit of the project, a single small LLM training loop that an agent can perturb autonomously under a fixed 5-minute budget, but adds a lightweight discovery control plane around that loop:
 
-The agents claim that we are now in the 10,205th generation of the code base, in any case no one could tell if that's right or wrong as the "code" is now a self-modifying binary that has grown beyond human comprehension. This repo is the story of how it all began. -@karpathy, March 2026.*
+- emitter-based mutation selection instead of a single hill-climbing style
+- archive/niche memory so stepping stones are not immediately forgotten
+- conjecture and crash memory carried between turns
+- hook-driven autonomous continuation on `autoresearch/*` branches
+- a repo-local Modal GPU runner with persistent cache volumes and faster launch behavior
 
-The idea: give an AI agent a small but real LLM training setup and let it experiment autonomously overnight. It modifies the code, trains for 5 minutes, checks if the result improved, keeps or discards, and repeats. You wake up in the morning to a log of experiments and (hopefully) a better model.
+The public branch is curated to keep only the intentional fork surface: the control-plane, the runner, tests, the best validated `train.py` found in our run history, and release charts summarizing the search.
 
-The training code here is a simplified single-GPU implementation of [nanochat](https://github.com/karpathy/nanochat). The core idea is still the same: you are not touching the Python files the way you normally would as a researcher. Instead, you are programming the research organization around the code.
+## Upstream Base
 
-This update keeps the original repo shape and constraints, but adds a **Codex-native discovery control plane** around the loop:
+The clean base for this fork is `karpathy/autoresearch`, which provides:
 
-- Codex reads `program.md` automatically through repo-local `.codex/config.toml`.
-- Repo-local hooks provide persistent research memory, search-phase control, Bash safety rails, automated run parsing, and a `Stop`-hook continuation loop.
-- The original `results.tsv` stays intact for compatibility, while richer machine-readable state lives in `results/discovery/`.
-- `train.py` remains the only experiment target. `prepare.py`, the eval harness, and dependency set remain fixed.
+- `prepare.py` for one-time data prep and evaluation utilities
+- `train.py` as the only experiment target
+- a fixed 5-minute training budget
+- `val_bpb` as the optimization metric
 
-## How it works
+This repo keeps that contract. The benchmark is still the same 5-minute `train.py` run. The Modal timeout is only an outer guardrail around remote startup, sync, and evaluation.
 
-The repo is deliberately kept small and only really has three files that matter:
+## What This Fork Adds
 
-- **`prepare.py`** — fixed constants, one-time data prep (downloads training data, trains a BPE tokenizer), and runtime utilities (dataloader, evaluation). Not modified.
-- **`train.py`** — the single file the agent edits during experiments. Contains the full GPT model, optimizer (Muon + AdamW), and training loop. Everything is fair game: architecture, optimizer, batch size, model size, etc.
-- **`program.md`** — baseline instructions for the agent. In this update, Codex reads it automatically as project guidance.
+The main addition is a small repo-local discovery layer:
 
-By design, training runs for a **fixed 5-minute time budget** (wall clock, excluding startup and compilation), regardless of the details of your compute. The metric is **val_bpb** (validation bits per byte): lower is better, and vocab-size-independent, so architectural changes are fairly compared.
+- `.codex/hooks.json` wires session-start, prompt-submit, pre-tool, post-tool, and stop-time hooks
+- `research/` stores the shared state/update logic for archive memory, emitter selection, and run review
+- `scripts/modal_gpu.py` runs the loop on remote NVIDIA GPUs while reusing dependency and cache state aggressively
+- `program.md` defines the agent-facing research protocol
+- `tests/` covers the control-plane and runner behavior with stdlib-only unit tests
 
-## What the hook layer adds
+The search loop chooses among:
 
-The hook layer makes autoresearch behave less like a plain hill-climber and more like a tiny discovery engine:
+- `local_tuner`
+- `optimizer_hacker`
+- `architecture_mutator`
+- `simplifier`
+- `contrarian`
+- `recombinator`
+- `anomaly_chaser`
 
-- **Never-stop continuation.** A repo-local `Stop` hook keeps the loop going on `autoresearch/*` branches instead of letting Codex end the session.
-- **Emitter-based search.** The next experiment is chosen from a small portfolio of search roles (`local_tuner`, `optimizer_hacker`, `architecture_mutator`, `simplifier`, `contrarian`, `recombinator`, `anomaly_chaser`) instead of one monolithic style of mutation.
-- **Quality-diversity archive.** Results are grouped into niches so the system preserves stepping stones instead of tracking only one incumbent best.
-- **Conjecture memory.** The hooks distill simple, machine-generated theories from outcomes and feed them back at session start.
-- **Automated run review.** After `uv run train.py > run.log 2>&1`, a `PostToolUse` hook parses the run, scores novelty / fitness / information gain, and returns a structured review to Codex.
-- **Safety rails.** A `PreToolUse` hook blocks destructive or off-policy Bash commands such as dependency installation, `tee`, `git push`, and writes against `prepare.py`.
+## Best Validated Configuration Shipped Here
 
-The result is still recognizably autoresearch, but the search process now has memory, structure, and a stronger bias toward discovery.
+This public branch ships the best validated `train.py` configuration we found during the since-inception run history used for the charts below.
 
-## Quick start
+Best validated run:
 
-Requirements: a single NVIDIA GPU (tested on H100), Python 3.10+, [uv](https://docs.astral.sh/uv/), and a trusted Codex project so `.codex/config.toml` and `.codex/hooks.json` are loaded.
+- commit: `0261b2c`
+- `val_bpb`: `0.985596`
+- baseline: `80b9a32` at `0.997426`
+- absolute improvement: `0.011830`
+- relative improvement: about `1.186%`
+
+The most important differences versus the discovery-path base are:
+
+- shared norm changed from pure RMSNorm to LayerNorm with dtype preservation
+- q/k normalization changed to a mixed RMSNorm/LayerNorm path
+- total batch reduced to `2**17`
+- Muon weight decay retuned to `0.109`
+- warmup restored to `2%`
+- device batch reduced to `64`
+
+This is not presented as a final optimum, only as the best validated point discovered in this release cut.
+
+## Since-Inception Research Progress
+
+Overall run history, including keeps, discards, crashes, and the best-so-far frontier:
+
+![Since-Inception val_bpb Progress](docs/figures/val_bpb_since_inception.svg)
+
+Frontier-only view to make the cumulative best improvements easier to inspect:
+
+![Since-Inception Frontier](docs/figures/val_bpb_frontier.svg)
+
+Release-cut summary:
+
+- total runs: `102`
+- keeps: `12`
+- discards: `83`
+- crashes: `7`
+- best run: `0261b2c` at `0.985596`
+
+## Quick Start
+
+Requirements:
+
+- Python 3.10+
+- `uv`
+- a single NVIDIA GPU locally, or Modal access if using the remote runner
+
+Setup:
 
 ```bash
-# 1. Install uv project manager (if you don't already have it)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 2. Install dependencies
 uv sync
-
-# 3. Download data and train tokenizer (one-time, ~2 min)
 uv run prepare.py
+```
 
-# 4. Optional sanity check: manually run one training experiment (~5 min)
+Local benchmark run:
+
+```bash
 uv run train.py
 ```
 
-Once the above works, open the repo in Codex and start with something like:
-
-```text
-Read program.md, create a fresh autoresearch/<tag> branch, run the baseline, and continue autonomously.
-```
-
-The hook layer will activate automatically if the repo is trusted and project config is loaded.
-
-## Human-visible state
-
-Two state surfaces now coexist on purpose:
-
-- **`results.tsv`** — the compact, human-readable experiment ledger used by the original repo.
-- **`results/discovery/`** — untracked machine state written by the hooks: event log, current search phase, emitter stats, niche archive, crash signatures, and selected next plan.
-
-You can inspect the richer state with:
+Remote GPU run through the repo-local runner:
 
 ```bash
-python -m research.cli summary
-python -m research.cli archive
-python -m research.cli next
+python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1
 ```
 
-## Project structure
+The inner command must remain exactly `uv run train.py`. The runner only handles transport, cache reuse, and sandbox lifecycle.
+
+Optional runner overrides:
+
+- `AUTORESEARCH_MODAL_APP_NAME`
+- `AUTORESEARCH_MODAL_DATA_VOLUME_NAME`
+- `AUTORESEARCH_MODAL_HF_VOLUME_NAME`
+
+## Repo Layout
 
 ```text
-prepare.py             # constants, data prep + runtime utilities (do not modify)
-train.py               # model, optimizer, training loop (agent modifies this)
-program.md             # research instructions (loaded automatically by Codex)
-.codex/config.toml     # enables hooks and treats program.md as project guidance
-.codex/hooks.json      # lifecycle hook wiring
-.codex/hooks/*.py      # repo-local hook entrypoints
-research/*.py          # shared discovery-state logic for hooks + CLI
-pyproject.toml         # dependencies
+prepare.py             # fixed data prep + evaluation utilities
+train.py               # single experiment target, shipped at the best validated config
+program.md             # agent-facing research protocol
+.codex/                # repo-local Codex config + hooks
+research/              # discovery-state logic
+scripts/modal_gpu.py   # remote GPU runner
+tests/                 # control-plane and runner tests
+docs/figures/          # release charts
 ```
 
-## Design choices
+## Testing
 
-- **Single file to modify during experiments.** The agent still only changes `train.py`. That keeps diffs reviewable and preserves the charm of the original project.
-- **Fixed time budget.** Training always runs for exactly 5 minutes, regardless of platform. This makes experiments comparable within one machine.
-- **Repo-local control plane.** Search strategy, memory, and autonomy live outside `train.py`, so the training code stays simple and the research organization evolves independently.
-- **Compatibility first.** The new machinery augments `results.tsv` instead of replacing it.
-- **No new dependencies required.** The hook/control-plane code uses only the Python standard library.
-
-## Platform support
-
-This code still requires a single NVIDIA GPU. In principle it is possible to support CPU, MPS, and other platforms, but that would bloat the core repo. Forks remain the right place for platform-specific adaptations.
-
-If you are running on smaller hardware, the original recommendations still apply:
-
-1. Use a lower-entropy dataset such as [TinyStories](https://huggingface.co/datasets/karpathy/tinystories-gpt4-clean).
-2. Consider lowering `vocab_size`.
-3. Reduce `MAX_SEQ_LEN` and `EVAL_TOKENS` in `prepare.py` in your own fork if you are intentionally targeting smaller machines.
-4. Lower `DEPTH` and other scale knobs in `train.py`.
-5. Try a simpler `WINDOW_PATTERN` such as `"L"`.
-6. Reduce `TOTAL_BATCH_SIZE` while keeping it power-of-two.
-
-## Notable forks
-
-- [miolini/autoresearch-macos](https://github.com/miolini/autoresearch-macos) (MacOS)
-- [trevin-creator/autoresearch-mlx](https://github.com/trevin-creator/autoresearch-mlx) (MacOS)
-- [jsegov/autoresearch-win-rtx](https://github.com/jsegov/autoresearch-win-rtx) (Windows)
-- [andyluo7/autoresearch](https://github.com/andyluo7/autoresearch) (AMD)
+```bash
+python3 -m py_compile research/core.py scripts/modal_gpu.py train.py
+python3 -m unittest tests/test_research_core.py tests/test_modal_gpu.py
+```
 
 ## License
 

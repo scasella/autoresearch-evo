@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="620" viewBox="0 0 1600 620">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif; fill: #111827; } .small{font-size:11px;fill:#6b7280;} .axis{font-size:12px;fill:#374151;} .title{font-size:22px;font-weight:700;} .tick{font-size:11px;fill:#4b5563;}</style>
+<text x="800.0" y="38" text-anchor="middle" class="title">Autoresearch Best-So-Far Frontier</text>
+<text x="800.0" y="60" text-anchor="middle" class="small">Best validated run: 0261b2c at 0.985596 across 102 total runs</text>
+<line x1="90.0" y1="90" x2="90.0" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="90.0" y="574" text-anchor="middle" class="tick">1</text>
+<line x1="235.9" y1="90" x2="235.9" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="235.9" y="574" text-anchor="middle" class="tick">11</text>
+<line x1="381.9" y1="90" x2="381.9" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="381.9" y="574" text-anchor="middle" class="tick">21</text>
+<line x1="527.8" y1="90" x2="527.8" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="527.8" y="574" text-anchor="middle" class="tick">31</text>
+<line x1="673.8" y1="90" x2="673.8" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="673.8" y="574" text-anchor="middle" class="tick">41</text>
+<line x1="819.7" y1="90" x2="819.7" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="819.7" y="574" text-anchor="middle" class="tick">51</text>
+<line x1="965.6" y1="90" x2="965.6" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="965.6" y="574" text-anchor="middle" class="tick">61</text>
+<line x1="1111.6" y1="90" x2="1111.6" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="1111.6" y="574" text-anchor="middle" class="tick">71</text>
+<line x1="1257.5" y1="90" x2="1257.5" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="1257.5" y="574" text-anchor="middle" class="tick">81</text>
+<line x1="1403.5" y1="90" x2="1403.5" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="1403.5" y="574" text-anchor="middle" class="tick">91</text>
+<line x1="1549.4" y1="90" x2="1549.4" y2="552" stroke="#eef2f7" stroke-width="1"/>
+<text x="1549.4" y="574" text-anchor="middle" class="tick">101</text>
+<line x1="90" y1="552.0" x2="1564" y2="552.0" stroke="#eef2f7" stroke-width="1"/>
+<text x="80" y="556.0" text-anchor="end" class="tick">0.984744</text>
+<line x1="90" y1="459.6" x2="1564" y2="459.6" stroke="#eef2f7" stroke-width="1"/>
+<text x="80" y="463.6" text-anchor="end" class="tick">0.987366</text>
+<line x1="90" y1="367.2" x2="1564" y2="367.2" stroke="#eef2f7" stroke-width="1"/>
+<text x="80" y="371.2" text-anchor="end" class="tick">0.989987</text>
+<line x1="90" y1="274.8" x2="1564" y2="274.8" stroke="#eef2f7" stroke-width="1"/>
+<text x="80" y="278.8" text-anchor="end" class="tick">0.992609</text>
+<line x1="90" y1="182.4" x2="1564" y2="182.4" stroke="#eef2f7" stroke-width="1"/>
+<text x="80" y="186.4" text-anchor="end" class="tick">0.995230</text>
+<line x1="90" y1="90.0" x2="1564" y2="90.0" stroke="#eef2f7" stroke-width="1"/>
+<text x="80" y="94.0" text-anchor="end" class="tick">0.997852</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="3" points="90.0,105.0 104.6,105.0 104.6,105.0 119.2,105.0 119.2,105.0 133.8,105.0 133.8,105.0 148.4,105.0 148.4,116.7 163.0,116.7 163.0,404.9 177.6,404.9 177.6,404.9 192.2,404.9 192.2,404.9 206.8,404.9 206.8,404.9 221.3,404.9 221.3,463.2 235.9,463.2 235.9,463.2 250.5,463.2 250.5,463.2 265.1,463.2 265.1,463.2 279.7,463.2 279.7,463.2 294.3,463.2 294.3,463.2 308.9,463.2 308.9,463.2 323.5,463.2 323.5,463.2 338.1,463.2 338.1,505.1 352.7,505.1 352.7,505.1 367.3,505.1 367.3,505.1 381.9,505.1 381.9,505.1 396.5,505.1 396.5,505.1 411.1,505.1 411.1,505.1 425.7,505.1 425.7,505.1 440.3,505.1 440.3,506.8 454.9,506.8 454.9,506.8 469.4,506.8 469.4,506.8 484.0,506.8 484.0,506.8 498.6,506.8 498.6,506.8 513.2,506.8 513.2,512.0 527.8,512.0 527.8,512.0 542.4,512.0 542.4,512.0 557.0,512.0 557.0,512.0 571.6,512.0 571.6,512.0 586.2,512.0 586.2,512.0 600.8,512.0 600.8,512.0 615.4,512.0 615.4,512.0 630.0,512.0 630.0,512.0 644.6,512.0 644.6,512.0 659.2,512.0 659.2,512.0 673.8,512.0 673.8,512.0 688.4,512.0 688.4,512.0 703.0,512.0 703.0,512.0 717.5,512.0 717.5,512.0 732.1,512.0 732.1,512.0 746.7,512.0 746.7,512.0 761.3,512.0 761.3,512.0 775.9,512.0 775.9,512.0 790.5,512.0 790.5,512.0 805.1,512.0 805.1,512.0 819.7,512.0 819.7,512.0 834.3,512.0 834.3,512.0 848.9,512.0 848.9,512.0 863.5,512.0 863.5,512.0 878.1,512.0 878.1,512.0 892.7,512.0 892.7,512.0 907.3,512.0 907.3,512.0 921.9,512.0 921.9,512.0 936.5,512.0 936.5,512.0 951.0,512.0 951.0,512.0 965.6,512.0 965.6,512.0 980.2,512.0 980.2,512.0 994.8,512.0 994.8,512.0 1009.4,512.0 1009.4,512.0 1024.0,512.0 1024.0,512.0 1038.6,512.0 1038.6,512.0 1053.2,512.0 1053.2,512.0 1067.8,512.0 1067.8,512.0 1082.4,512.0 1082.4,512.0 1097.0,512.0 1097.0,512.0 1111.6,512.0 1111.6,512.0 1126.2,512.0 1126.2,512.0 1140.8,512.0 1140.8,512.0 1155.4,512.0 1155.4,522.0 1170.0,522.0 1170.0,522.0 1184.6,522.0 1184.6,522.0 1199.1,522.0 1199.1,522.0 1213.7,522.0 1213.7,522.0 1228.3,522.0 1228.3,522.0 1242.9,522.0 1242.9,522.0 1257.5,522.0 1257.5,522.0 1272.1,522.0 1272.1,522.0 1286.7,522.0 1286.7,522.0 1301.3,522.0 1301.3,522.0 1315.9,522.0 1315.9,522.0 1330.5,522.0 1330.5,522.0 1345.1,522.0 1345.1,522.0 1359.7,522.0 1359.7,522.0 1374.3,522.0 1374.3,522.0 1388.9,522.0 1388.9,522.0 1403.5,522.0 1403.5,522.0 1418.1,522.0 1418.1,522.0 1432.7,522.0 1432.7,522.0 1447.2,522.0 1447.2,522.0 1461.8,522.0 1461.8,522.0 1476.4,522.0 1476.4,522.0 1491.0,522.0 1491.0,522.0 1505.6,522.0 1505.6,522.0 1520.2,522.0 1520.2,522.0 1534.8,522.0 1534.8,522.0 1549.4,522.0 1549.4,522.0 1564.0,522.0 1564.0,522.0"/>
+<circle cx="90.0" cy="105.0" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1"/>
+<text x="98.0" y="95.0" font-size="10">80b9a32 0.997426</text>
+<circle cx="148.4" cy="116.7" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1"/>
+<text x="156.4" y="106.7" font-size="10">25c1e81 0.997094</text>
+<circle cx="163.0" cy="404.9" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1"/>
+<text x="171.0" y="394.9" font-size="10">8f6cbf7 0.988917</text>
+<circle cx="221.3" cy="463.2" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1"/>
+<text x="229.3" y="453.2" font-size="10">e096ff3 0.987264</text>
+<circle cx="338.1" cy="505.1" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1"/>
+<text x="346.1" y="495.1" font-size="10">60f4548 0.986076</text>
+<circle cx="440.3" cy="506.8" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1"/>
+<text x="448.3" y="496.8" font-size="10">97c1af1 0.986026</text>
+<circle cx="513.2" cy="512.0" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1"/>
+<text x="521.2" y="502.0" font-size="10">38c5c48 0.985880</text>
+<circle cx="1155.4" cy="522.0" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1"/>
+<text x="1163.4" y="512.0" font-size="10">0261b2c 0.985596</text>
+<text x="800.0" y="596" text-anchor="middle" class="axis">Run Number Since Inception</text>
+<text x="24" y="310.0" text-anchor="middle" class="axis" transform="rotate(-90 24 310.0)">Best-so-far val_bpb</text>
+<text x="1590" y="610" text-anchor="end" class="small">Generated from results.tsv on 2026-04-06 11:32:08 </text>
+</svg>
