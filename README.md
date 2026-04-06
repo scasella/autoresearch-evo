@@ -16,6 +16,8 @@ This is a heuristic discovery control plane with novelty-search-inspired explora
 
 The public branch is curated to keep only the intentional fork surface: the control-plane, the runner, tests, the best validated `train.py` found in our run history, and release charts summarizing the search.
 
+If you want the deeper explanation of how the Codex/discovery control plane works, including each hook, emitter, and memory layer, see [docs/discovery-control-plane.md](docs/discovery-control-plane.md).
+
 ## Upstream Base
 
 The clean base for this fork is `karpathy/autoresearch`, which provides:
