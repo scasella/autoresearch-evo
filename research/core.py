@@ -127,6 +127,9 @@ def initial_state() -> dict[str, Any]:
         "recent_experiments": [],
         "near_misses": [],
         "archive": {},
+        "last_emitter": None,
+        "current_emitter_streak": 0,
+        "recent_emitters": [],
         "emitter_stats": {
             name: {
                 "attempts": 0,
@@ -142,6 +145,9 @@ def initial_state() -> dict[str, Any]:
         "conjectures": [],
         "current_plan": None,
         "last_experiment_id": None,
+        "last_results_commit": None,
+        "last_exp_commit": None,
+        "state_warnings": [],
         "ingested_results_tsv_rows": 0,
         "results_tsv_exists": False,
         "updated_at": utcnow_iso(),
@@ -161,10 +167,17 @@ def load_state(root: Path) -> dict[str, Any]:
     state.setdefault("category_stats", {})
     state.setdefault("crash_signatures", {})
     state.setdefault("conjectures", [])
+    state.setdefault("last_emitter", None)
+    state.setdefault("current_emitter_streak", 0)
+    state.setdefault("recent_emitters", [])
     state.setdefault("current_plan", None)
+    state.setdefault("last_results_commit", None)
+    state.setdefault("last_exp_commit", None)
+    state.setdefault("state_warnings", [])
     state.setdefault("ingested_results_tsv_rows", 0)
     state.setdefault("results_tsv_exists", False)
     _ingest_results_tsv(root, state)
+    _reconcile_state(root, state)
     state["conjectures"] = _derive_conjectures(state)
     return state
 
@@ -190,7 +203,9 @@ def _ingest_results_tsv(root: Path, state: dict[str, Any]) -> None:
     rows = _read_results_tsv(root)
     state["results_tsv_exists"] = bool(rows)
     if not rows:
+        state["last_results_commit"] = None
         return
+    state["last_results_commit"] = rows[-1].get("commit") or None
     if state.get("baseline_val_bpb") is None:
         first = rows[0]
         try:
@@ -278,6 +293,22 @@ def current_commit_subject(root: Path) -> str:
         return git(root, "log", "-1", "--pretty=%s")
     except Exception:
         return ""
+
+
+def _is_experiment_subject(subject: str) -> bool:
+    return subject.lower().startswith("exp:")
+
+
+def _is_restore_subject(subject: str) -> bool:
+    return subject.lower().startswith("restore")
+
+
+def _emitter_from_subject(subject: str) -> str | None:
+    match = re.search(r"\[emitter=([^\]]+)\]", subject)
+    if not match:
+        return None
+    emitter = match.group(1).strip()
+    return emitter if emitter in EMITTERS else None
 
 
 def train_diff(root: Path) -> str:
@@ -474,6 +505,53 @@ def _derive_conjectures(state: dict[str, Any]) -> list[str]:
     return conjectures[:4]
 
 
+def _reconcile_state(root: Path, state: dict[str, Any]) -> bool:
+    changed = False
+    warnings: list[str] = []
+    head_commit = current_commit(root)
+    head_subject = current_commit_subject(root)
+    head_emitter = _emitter_from_subject(head_subject)
+    last_results_commit = state.get("last_results_commit")
+
+    next_last_exp_commit = head_commit if head_commit and _is_experiment_subject(head_subject) else None
+    if state.get("last_exp_commit") != next_last_exp_commit:
+        state["last_exp_commit"] = next_last_exp_commit
+        changed = True
+
+    plan = state.get("current_plan") or None
+    stale_plan = False
+    if plan:
+        if _is_restore_subject(head_subject):
+            stale_plan = True
+            warnings.append("Cleared stale plan because HEAD is a newer restore commit.")
+        elif head_commit and last_results_commit and head_commit == last_results_commit:
+            stale_plan = True
+            warnings.append("Cleared stale plan because HEAD already has a logged results row.")
+        elif head_emitter and plan.get("emitter") and plan.get("emitter") != head_emitter:
+            warnings.append(
+                f"Plan emitter {plan.get('emitter')} does not match HEAD emitter {head_emitter}; favor the commit tag."
+            )
+
+    if stale_plan and state.get("current_plan") is not None:
+        state["current_plan"] = None
+        changed = True
+
+    if head_commit and _is_experiment_subject(head_subject) and last_results_commit != head_commit:
+        warnings.append(f"HEAD experiment {head_commit} has no matching results.tsv row yet.")
+
+    recent_emitters = state.get("recent_emitters", [])[-8:]
+    if recent_emitters:
+        dominant = max(set(recent_emitters), key=recent_emitters.count)
+        if recent_emitters.count(dominant) >= 6:
+            warnings.append(f"Emitter collapse detected: {dominant} dominates the recent window.")
+
+    if state.get("state_warnings") != warnings[:6]:
+        state["state_warnings"] = warnings[:6]
+        changed = True
+
+    return changed
+
+
 def _phase_from_state(state: dict[str, Any]) -> str:
     if state.get("experiment_count", 0) == 0:
         return "baseline"
@@ -530,15 +608,36 @@ def select_next_plan(state: dict[str, Any]) -> Plan:
         "stabilize": {"anomaly_chaser": 0.4, "simplifier": 0.2, "local_tuner": 0.1},
     }
 
+    recent_emitters = state.get("recent_emitters", [])[-8:]
+    streak_emitter = state.get("last_emitter")
+    streak = int(state.get("current_emitter_streak", 0) or 0)
+    eligible_emitters = set(state.get("emitter_stats", {}).keys())
+    coverage_bonus = {emitter: 0.0 for emitter in eligible_emitters}
+
+    if state.get("stall_count", 0) >= 4:
+        dormant_emitters = [emitter for emitter in eligible_emitters if emitter not in recent_emitters[-4:]]
+        for emitter in dormant_emitters:
+            coverage_bonus[emitter] += 0.35
+
+    if streak >= 3 and streak_emitter in eligible_emitters and len(eligible_emitters) > 1:
+        eligible_emitters.remove(streak_emitter)
+
+    if not eligible_emitters:
+        eligible_emitters = set(state.get("emitter_stats", {}).keys())
+
     best_emitter = "local_tuner"
     best_score = -1e9
-    for emitter, stats in state.get("emitter_stats", {}).items():
+    for emitter in eligible_emitters:
+        stats = state.get("emitter_stats", {}).get(emitter, {})
         attempts = stats.get("attempts", 0)
         mean_reward = stats.get("total_reward", 0.0) / max(1, attempts)
         exploration = math.sqrt(2.0 * math.log(total_attempts + 2) / (attempts + 1))
         recency_penalty = 0.05 if stats.get("last_used_index", 0) == total_attempts else 0.0
+        recency_penalty += 0.08 * recent_emitters.count(emitter)
+        if emitter == streak_emitter:
+            recency_penalty += 0.15 * max(0, streak - 1)
         bias = phase_biases.get(phase, {}).get(emitter, 0.0)
-        score = mean_reward + exploration + bias - recency_penalty
+        score = mean_reward + exploration + bias + coverage_bonus.get(emitter, 0.0) - recency_penalty
         if score > best_score:
             best_score = score
             best_emitter = emitter
@@ -661,6 +760,7 @@ def record_experiment_from_run(root: Path) -> tuple[ExperimentRecord | None, dic
         state = load_state(root)
         branch = current_branch(root)
         commit = current_commit(root)
+        subject = current_commit_subject(root)
         plan = state.get("current_plan") or load_json(plan_path(root), {}) or None
         record_token = stable_id(commit or "no-commit", run_log.stat().st_mtime_ns if run_log.exists() else "no-log")
         if record_token == state.get("last_experiment_id"):
@@ -670,9 +770,9 @@ def record_experiment_from_run(root: Path) -> tuple[ExperimentRecord | None, dic
         diff_text = train_diff(root)
         category, categories = _classify_category(diff_text, additions, deletions)
         niche = _derive_niche(category, metrics, plan, additions, deletions)
-        description = _description_from_commit(root)
+        description = subject or _description_from_commit(root)
         phase = str((plan or {}).get("phase") or _phase_from_state(state))
-        emitter = str((plan or {}).get("emitter") or "local_tuner")
+        emitter = _emitter_from_subject(subject) or str((plan or {}).get("emitter") or "local_tuner")
         crash_signature = None
         status = "ok"
         if metrics is None:
@@ -770,6 +870,7 @@ def _summarize_diff(diff_text: str, categories: list[str], additions: int, delet
 
 def _update_state_from_experiment(state: dict[str, Any], experiment: ExperimentRecord) -> None:
     state["experiment_count"] = int(state.get("experiment_count", 0)) + 1
+    state["last_results_commit"] = experiment.commit
 
     stats = state["emitter_stats"].setdefault(
         experiment.emitter,
@@ -861,6 +962,13 @@ def _update_state_from_experiment(state: dict[str, Any], experiment: ExperimentR
     recent_payload = experiment.to_dict()
     state["recent_experiments"].append(recent_payload)
     state["recent_experiments"] = state["recent_experiments"][-20:]
+    if experiment.emitter == state.get("last_emitter"):
+        state["current_emitter_streak"] = int(state.get("current_emitter_streak", 0)) + 1
+    else:
+        state["last_emitter"] = experiment.emitter
+        state["current_emitter_streak"] = 1
+    state["recent_emitters"].append(experiment.emitter)
+    state["recent_emitters"] = state["recent_emitters"][-8:]
     state["phase"] = _phase_from_state(state)
 
 
@@ -939,6 +1047,11 @@ def build_session_context(root: Path, state: dict[str, Any]) -> str:
         for signature, data in sorted(crashes.items(), key=lambda item: item[1].get("count", 0), reverse=True)[:3]:
             lines.append(f"  - {signature} (count={data.get('count', 0)})")
 
+    if state.get("state_warnings"):
+        lines.append("- State warnings:")
+        for warning in state["state_warnings"][:4]:
+            lines.append(f"  - {warning}")
+
     lines.append("- Rich state is stored in results/discovery/. Treat it as machine memory; do not commit it.")
     return "\n".join(lines)
 
@@ -962,7 +1075,9 @@ def build_prompt_context(root: Path, state: dict[str, Any], user_prompt: str) ->
     return (
         f"Repo-local discovery hooks are active. {mode}. Current branch: {branch or '(none)'}. "
         f"Best={_format_best(state)}. Phase={_phase_from_state(state)}. "
-        "Use train.py as the only experiment target, trust the hook-generated run review, and keep results.tsv as the public ledger."
+        "Use train.py as the only experiment target, except for narrowly-scoped scripts/modal_gpu.py fixes that unblock remote GPU execution. "
+        "Treat runner fixes as separate infrastructure commits, trust the hook-generated run review, keep results.tsv as the public ledger, "
+        "and maintain a 1:1 mapping between launched runs, exp commits, and ledger rows."
     )
 
 
@@ -978,15 +1093,25 @@ def build_next_prompt(
         if not state.get("autonomy_enabled"):
             return None
 
+        reconciled = _reconcile_state(root, state)
+        if reconciled:
+            if state.get("current_plan") is None:
+                save_json_atomic(plan_path(root), {})
+            save_state(root, state)
+
         branch = current_branch(root)
+        head_commit = current_commit(root)
+        head_subject = current_commit_subject(root)
         results_path = root / "results.tsv"
         cache_path = Path.home() / ".cache" / "autoresearch"
 
         if not branch or not branch.startswith("autoresearch/"):
             prompt = (
                 "Continue the autoresearch setup autonomously. Create or switch to a fresh "
-                "autoresearch/<tag> branch, verify ~/.cache/autoresearch/ exists, initialize results.tsv with the header row if needed, "
-                "and then run the baseline before making any train.py edits. Do not ask for confirmation."
+                "autoresearch/<tag> branch, verify ~/.cache/autoresearch/ exists, stabilize scripts/modal_gpu.py only if remote GPU execution is blocked, "
+                "initialize results.tsv with the header row if needed, and then run the untouched baseline via "
+                "`python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1` before making any train.py edits. "
+                "Do not ask for confirmation."
             )
             if persist:
                 append_jsonl(events_path(root), {"event": "stop_continue", "timestamp": utcnow_iso(), "reason": prompt})
@@ -1005,8 +1130,19 @@ def build_next_prompt(
 
         if not results_path.exists() or not state.get("results_tsv_exists"):
             prompt = (
-                "Continue the setup on the current autoresearch branch. Create results.tsv with the standard header, run the baseline `uv run train.py > run.log 2>&1`, "
-                "log the baseline to results.tsv, and then continue autonomously."
+                "Continue the setup on the current autoresearch branch. Create results.tsv with the standard header, run the untouched baseline "
+                "`python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, log that exact baseline commit to results.tsv, "
+                "and then continue autonomously."
+            )
+            if persist:
+                append_jsonl(events_path(root), {"event": "stop_continue", "timestamp": utcnow_iso(), "reason": prompt})
+            return prompt
+
+        if head_commit and _is_experiment_subject(head_subject) and state.get("last_results_commit") != head_commit:
+            prompt = (
+                f"Continue the existing in-flight experiment at HEAD {head_commit}. Run "
+                "`python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, "
+                "record the result in results.tsv for that exact commit, then continue autonomously."
             )
             if persist:
                 append_jsonl(events_path(root), {"event": "stop_continue", "timestamp": utcnow_iso(), "reason": prompt})
@@ -1030,8 +1166,11 @@ def build_next_prompt(
             f"Hypothesis: {plan.hypothesis} "
             f"Predicted effect: {plan.predicted_direction}. "
             f"Current best: {_format_best(state)}. "
-            "Make exactly one coherent mutation to train.py aligned to this plan, commit it with an `exp:` message, run `uv run train.py > run.log 2>&1`, "
-            "use the hook-generated discovery review to decide keep/discard/investigate, update results.tsv, and keep going without asking for confirmation."
+            "Make exactly one coherent mutation to train.py aligned to this plan. If remote GPU execution is genuinely blocked, you may make a separate non-exp infrastructure fix to scripts/modal_gpu.py. "
+            "Commit the candidate with an `exp:` message, keeping one launched run mapped to one `exp:` commit; if you revise a candidate before launch, amend instead of stacking a new experiment commit. "
+            "Run `python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, use the hook-generated discovery review to decide keep/discard/investigate, "
+            "update results.tsv for the exact commit that ran, follow up near-wins within about 0.001 bpb of best before abandoning the lane, restore to the best validated tip after losers, "
+            "and keep going without asking for confirmation."
             f"{no_fly_text}"
         )
         if persist:
@@ -1059,7 +1198,7 @@ def check_command_policy(root: Path, command: str) -> str | None:
         has_run_log = re.search(r">\s*run\.log\b", command_lower) is not None
         has_stderr_redirect = "2>&1" in command_lower
         if not (has_run_log and has_stderr_redirect):
-            return "Train runs must be launched as `uv run train.py > run.log 2>&1` so the hook layer can parse them cleanly."
+            return "Train runs must be launched as `python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1` so the hook layer can parse them cleanly."
 
     write_verbs = ["sed -i", "> prepare.py", ">> prepare.py", "mv ", "cp ", "perl -pi", "python - <<"]
     if "prepare.py" in command_lower and any(verb in command_lower for verb in write_verbs):

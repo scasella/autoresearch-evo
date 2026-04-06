@@ -24,6 +24,14 @@ When GPU work is needed, follow the `$modal-gpu` workflow:
 4. Launch the target command through the Modal GPU runner with an explicit GPU type and timeout.
 5. Report evidence and clean up any remote sandboxes.
 
+The Modal runner is an allowed infrastructure exception to the "`train.py` only" rule, but treat it narrowly:
+
+- You may modify `scripts/modal_gpu.py` only to make remote GPU execution, cache visibility, or sandbox transport work correctly.
+- Runner edits are **infrastructure**, not experiments. Commit them separately with a non-`exp:` message.
+- Once the runner is healthy, freeze it. Do not keep tuning the launcher during normal search.
+- Avoid unnecessary repo-wide churn between runs. Changes outside `train.py` can trigger avoidable Modal image rebuilds, cache misses, and slow startup.
+- If infrastructure changes are required after the official baseline, make the fix separately and then re-run the untouched baseline before trusting new comparisons.
+
 ## Setup
 
 To set up a new experiment, work with the user to:
@@ -35,28 +43,35 @@ To set up a new experiment, work with the user to:
    - `prepare.py` — fixed constants, data prep, tokenizer, dataloader, evaluation. Do not modify.
    - `train.py` — the file you modify.
 4. **Verify data exists.** Check that `~/.cache/autoresearch/` contains data shards and a tokenizer. If not, tell the human to run `uv run prepare.py`.
-5. **Initialize `results.tsv`.** Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
-6. **Confirm and go.** Once setup looks good, start the experiment loop.
+5. **Stabilize the GPU path before the official baseline.** If `scripts/modal_gpu.py`, remote mounts, or cache wiring need work, do it now. Do not treat infrastructure debugging or repeated baseline re-stamps as normal search progress.
+6. **Initialize `results.tsv`.** Create `results.tsv` with just the header row. The baseline will be recorded after the first real run on stable infrastructure.
+7. **Confirm and go.** Once setup looks good, start the experiment loop.
 
 ## Experimentation
 
 Each experiment runs on a single GPU. Use `$modal-gpu` for experiment execution and any other GPU-bound task. The training script still runs for a **fixed time budget of 5 minutes** (wall clock training time, excluding startup and compilation). Once the repo-local Modal runner exists, launch experiments like this so `run.log` stays local for the hooks:
 
 ```bash
-python scripts/modal_gpu.py -- uv run train.py > run.log 2>&1
+python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1
 ```
+
+The wrapper is only transport. The inner experiment command must remain exactly `uv run train.py`.
+The 10-minute Modal timeout is an outer wall-clock guardrail for remote startup / sync / eval overhead. The benchmark itself is still the 5-minute training budget enforced inside `train.py`.
 
 ### What you CAN do
 
 - Modify `train.py`.
 - Change architecture, optimizer, hyperparameters, training loop details, batch size, and model size.
 - Use the hook-provided research guidance to choose the next experimental direction.
+- Make narrowly-scoped `scripts/modal_gpu.py` fixes only when remote GPU execution is genuinely blocked.
 
 ### What you CANNOT do
 
 - Modify `prepare.py`.
 - Install new packages or add dependencies.
 - Modify the evaluation harness. `evaluate_bpb` in `prepare.py` is the ground-truth metric.
+- Modify `scripts/modal_gpu.py` as part of an experiment or to change training / evaluation semantics.
+- Touch unrelated tracked files during normal search. A real experiment diff should normally be `train.py` only.
 - Use `tee` or let training output flood the context window. Always redirect to `run.log`.
 - Push, publish, or otherwise sync experimental branches. This is a local autonomous loop.
 
@@ -104,6 +119,14 @@ git commit -am "exp: <short description> [emitter=<name>]"
 
 The hooks can infer metadata if needed, but a structured message makes the archive cleaner.
 
+The experiment identity rules are strict:
+
+- One launched run must map to exactly one `exp:` commit.
+- One launched run must map to exactly one `results.tsv` row for that same commit hash.
+- If you revise a candidate **before** launching, amend the existing `exp:` commit instead of stacking another `exp:` commit on top.
+- Do not leave abandoned or superseded `exp:` commits in branch history.
+- Non-experiment commits such as restore commits or infrastructure fixes must not be logged as experiment rows.
+
 ### Use the hook review as the primary post-run analysis
 
 After `python scripts/modal_gpu.py -- uv run train.py > run.log 2>&1`, the post-tool hook will parse `run.log` and return a structured discovery review. That review includes:
@@ -125,6 +148,9 @@ Keep branch history clean:
 - **Keep** the commit if it improves `val_bpb`, or if it is materially simpler with no real regression.
 - **Discard** the commit if it clearly regresses and does not buy compelling novelty or insight.
 - **Investigate / replicate** marginal wins or surprising results before you commit to a new long local search around them.
+- If a run lands within roughly `0.001` bpb of the current best, or trades a tiny regression for a large VRAM / simplicity gain, spend the next run replicating, sharpening, or isolating it before abandoning the lane.
+- Restore back to the best validated tip before the next candidate. Do not let the branch drift forward from a known loser.
+- Keep diffs narrow. Do not bundle broad cleanup, multiple hypotheses, or unrelated code motion into the middle of the search loop.
 
 ## Output format
 
@@ -173,6 +199,12 @@ d4e5f6g	0.000000	0.0	crash	double model width (OOM)
 
 `results.tsv` is the compatibility ledger. The richer machine-readable memory is kept separately in `results/discovery/`.
 
+Logging discipline matters:
+
+- Update `results.tsv` immediately after each completed run and before making the next restore or candidate commit.
+- Every completed run should also appear in the discovery event log for the same commit.
+- If a run never actually launched, do not log it and do not leave its `exp:` commit as if it were a completed experiment.
+
 ## The experiment loop
 
 The experiment runs on a dedicated branch such as `autoresearch/apr5`.
@@ -181,23 +213,25 @@ LOOP FOREVER:
 
 1. Look at the git state: current branch and current commit.
 2. Read the latest hook context: current phase, active emitter, target niche, and anti-patterns.
-3. Tune `train.py` with **one** coherent experimental idea.
+3. Tune `train.py` with **one** coherent experimental idea. Before committing, make sure the tracked experiment diff is limited to `train.py` unless you are handling a separate infrastructure fix.
 4. Commit the candidate.
-5. Run the experiment through `$modal-gpu`: `python scripts/modal_gpu.py -- uv run train.py > run.log 2>&1`.
+5. Run the experiment through `$modal-gpu`: `python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`.
 6. Read the hook-generated discovery review.
 7. If the run crashed, inspect the tail of `run.log` only as needed to diagnose the error.
-8. Record the result in `results.tsv`.
+8. Record the result in `results.tsv` for the exact commit that was run.
 9. If the result genuinely advances the branch, keep it.
-10. If the result is equal or worse and does not justify branch advancement, reset back to where you started.
+10. If the result is equal or worse and does not justify branch advancement, restore back to the best validated commit you started from.
 11. Let the stop hook continue the session. Do **not** ask the human whether to keep going.
 
 ## Timeout and crash policy
 
 - Each experiment should take about 5 minutes total plus startup / eval overhead.
 - If a run exceeds 10 minutes, kill it and treat it as a failure.
+- Keep the Modal sandbox timeout aligned with this outer cap. Do not pay for long-idle remote sandboxes while waiting on infrastructure stalls.
 - If a crash is a trivial bug in the experimental edit, fix it and rerun.
 - If the idea itself looks broken, log `crash`, revert, and move on.
 - If a crash pattern repeats, the hook archive will remember it; do not keep retrying the same dead end.
+- If the failure is clearly infrastructure-related (Modal auth, image build, remote cache visibility, sandbox transport), treat it as an infrastructure blocker, not as a train.py research result. Fix the runner separately or ask the human for the missing prerequisite instead of burning experiment slots on repeated startup failures.
 
 ## Autonomy policy
 

@@ -5,19 +5,19 @@ build/
 dist/
 wheels/
 *.egg-info
+.DS_Store
 
 # Virtual environments
 .venv
 worktrees/
 results/
 queue/
+.omx/
+run.log
 
 # Agent prompt files (generated per-session by launchers)
 CLAUDE.md
 AGENTS.md
-
-# Experimental code/artifacts
-dev/
 
 # Results file
 results.tsv
