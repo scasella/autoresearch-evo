@@ -8,7 +8,7 @@ This fork keeps the original spirit of the project, a single small LLM training 
 - archive/niche memory so stepping stones are not immediately forgotten
 - conjecture and crash memory carried between turns
 - hook-driven autonomous continuation on `autoresearch/*` branches
-- a repo-local Modal GPU runner with persistent cache volumes and faster launch behavior
+- a repo-local experiment runner with an optional remote GPU backend
 
 The public branch is curated to keep only the intentional fork surface: the control-plane, the runner, tests, the best validated `train.py` found in our run history, and release charts summarizing the search.
 
@@ -21,7 +21,7 @@ The clean base for this fork is `karpathy/autoresearch`, which provides:
 - a fixed 5-minute training budget
 - `val_bpb` as the optimization metric
 
-This repo keeps that contract. The benchmark is still the same 5-minute `train.py` run. The Modal timeout is only an outer guardrail around remote startup, sync, and evaluation.
+This repo keeps that contract. The benchmark is still the same 5-minute `train.py` run. Any backend-specific timeout is only an outer guardrail around startup, sync, and evaluation.
 
 ## What This Fork Adds
 
@@ -29,7 +29,9 @@ The main addition is a small repo-local discovery layer:
 
 - `.codex/hooks.json` wires session-start, prompt-submit, pre-tool, post-tool, and stop-time hooks
 - `research/` stores the shared state/update logic for archive memory, emitter selection, and run review
-- `scripts/modal_gpu.py` runs the loop on remote NVIDIA GPUs while reusing dependency and cache state aggressively
+- `scripts/run_experiment.py` is the generic repo-local experiment runner
+- `scripts/backends/modal_backend.py` contains the optional Modal remote-GPU backend
+- `scripts/modal_gpu.py` remains as a compatibility shim for the Modal backend
 - `program.md` defines the agent-facing research protocol
 - `tests/` covers the control-plane and runner behavior with stdlib-only unit tests
 
@@ -90,7 +92,7 @@ Requirements:
 
 - Python 3.10+
 - `uv`
-- a single NVIDIA GPU locally, or Modal access if using the remote runner
+- a single NVIDIA GPU locally for the upstream-style path
 
 Setup:
 
@@ -105,19 +107,21 @@ Local benchmark run:
 uv run train.py
 ```
 
-Remote GPU run through the repo-local runner:
+Generic repo runner on the local backend:
 
 ```bash
-python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1
+python scripts/run_experiment.py --backend local -- uv run train.py > run.log 2>&1
 ```
 
-The inner command must remain exactly `uv run train.py`. The runner only handles transport, cache reuse, and sandbox lifecycle.
+Optional remote GPU run through the Modal backend:
 
-Optional runner overrides:
+```bash
+python scripts/run_experiment.py --backend modal --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1
+```
 
-- `AUTORESEARCH_MODAL_APP_NAME`
-- `AUTORESEARCH_MODAL_DATA_VOLUME_NAME`
-- `AUTORESEARCH_MODAL_HF_VOLUME_NAME`
+The inner command must remain exactly `uv run train.py`. The runner only handles transport, cache reuse, and backend lifecycle.
+
+For Modal-specific operational details and environment variables, see [docs/infra/modal.md](docs/infra/modal.md).
 
 ## Repo Layout
 
@@ -127,7 +131,9 @@ train.py               # single experiment target, shipped at the best validated
 program.md             # agent-facing research protocol
 .codex/                # repo-local Codex config + hooks
 research/              # discovery-state logic
-scripts/modal_gpu.py   # remote GPU runner
+scripts/run_experiment.py      # generic experiment runner
+scripts/backends/modal_backend.py # optional Modal backend
+scripts/modal_gpu.py           # compatibility shim for the Modal backend
 tests/                 # control-plane and runner tests
 docs/figures/          # release charts
 ```
@@ -135,8 +141,8 @@ docs/figures/          # release charts
 ## Testing
 
 ```bash
-python3 -m py_compile research/core.py scripts/modal_gpu.py train.py
-python3 -m unittest tests/test_research_core.py tests/test_modal_gpu.py
+python3 -m py_compile research/core.py scripts/run_experiment.py scripts/modal_gpu.py scripts/backends/modal_backend.py train.py
+python3 -m unittest discover -s tests -v
 ```
 
 ## License

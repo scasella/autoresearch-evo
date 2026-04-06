@@ -1075,7 +1075,7 @@ def build_prompt_context(root: Path, state: dict[str, Any], user_prompt: str) ->
     return (
         f"Repo-local discovery hooks are active. {mode}. Current branch: {branch or '(none)'}. "
         f"Best={_format_best(state)}. Phase={_phase_from_state(state)}. "
-        "Use train.py as the only experiment target, except for narrowly-scoped scripts/modal_gpu.py fixes that unblock remote GPU execution. "
+        "Use train.py as the only experiment target, except for narrowly-scoped runner/backend fixes that unblock remote GPU execution. "
         "Treat runner fixes as separate infrastructure commits, trust the hook-generated run review, keep results.tsv as the public ledger, "
         "and maintain a 1:1 mapping between launched runs, exp commits, and ledger rows."
     )
@@ -1108,9 +1108,9 @@ def build_next_prompt(
         if not branch or not branch.startswith("autoresearch/"):
             prompt = (
                 "Continue the autoresearch setup autonomously. Create or switch to a fresh "
-                "autoresearch/<tag> branch, verify ~/.cache/autoresearch/ exists, stabilize scripts/modal_gpu.py only if remote GPU execution is blocked, "
+                "autoresearch/<tag> branch, verify ~/.cache/autoresearch/ exists, stabilize the repo-local runner/backend only if remote GPU execution is blocked, "
                 "initialize results.tsv with the header row if needed, and then run the untouched baseline via "
-                "`python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1` before making any train.py edits. "
+                "`python scripts/run_experiment.py --backend modal --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1` before making any train.py edits. "
                 "Do not ask for confirmation."
             )
             if persist:
@@ -1131,7 +1131,7 @@ def build_next_prompt(
         if not results_path.exists() or not state.get("results_tsv_exists"):
             prompt = (
                 "Continue the setup on the current autoresearch branch. Create results.tsv with the standard header, run the untouched baseline "
-                "`python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, log that exact baseline commit to results.tsv, "
+                "`python scripts/run_experiment.py --backend modal --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, log that exact baseline commit to results.tsv, "
                 "and then continue autonomously."
             )
             if persist:
@@ -1141,7 +1141,7 @@ def build_next_prompt(
         if head_commit and _is_experiment_subject(head_subject) and state.get("last_results_commit") != head_commit:
             prompt = (
                 f"Continue the existing in-flight experiment at HEAD {head_commit}. Run "
-                "`python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, "
+                "`python scripts/run_experiment.py --backend modal --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, "
                 "record the result in results.tsv for that exact commit, then continue autonomously."
             )
             if persist:
@@ -1166,9 +1166,9 @@ def build_next_prompt(
             f"Hypothesis: {plan.hypothesis} "
             f"Predicted effect: {plan.predicted_direction}. "
             f"Current best: {_format_best(state)}. "
-            "Make exactly one coherent mutation to train.py aligned to this plan. If remote GPU execution is genuinely blocked, you may make a separate non-exp infrastructure fix to scripts/modal_gpu.py. "
+            "Make exactly one coherent mutation to train.py aligned to this plan. If remote GPU execution is genuinely blocked, you may make a separate non-exp infrastructure fix to the repo-local runner/backend. "
             "Commit the candidate with an `exp:` message, keeping one launched run mapped to one `exp:` commit; if you revise a candidate before launch, amend instead of stacking a new experiment commit. "
-            "Run `python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, use the hook-generated discovery review to decide keep/discard/investigate, "
+            "Run `python scripts/run_experiment.py --backend modal --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1`, use the hook-generated discovery review to decide keep/discard/investigate, "
             "update results.tsv for the exact commit that ran, follow up near-wins within about 0.001 bpb of best before abandoning the lane, restore to the best validated tip after losers, "
             "and keep going without asking for confirmation."
             f"{no_fly_text}"
@@ -1198,7 +1198,7 @@ def check_command_policy(root: Path, command: str) -> str | None:
         has_run_log = re.search(r">\s*run\.log\b", command_lower) is not None
         has_stderr_redirect = "2>&1" in command_lower
         if not (has_run_log and has_stderr_redirect):
-            return "Train runs must be launched as `python scripts/modal_gpu.py --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1` so the hook layer can parse them cleanly."
+            return "Train runs should go through `python scripts/run_experiment.py --backend modal --gpu H100 --timeout 10 -- uv run train.py > run.log 2>&1` so the hook layer can parse them cleanly."
 
     write_verbs = ["sed -i", "> prepare.py", ">> prepare.py", "mv ", "cp ", "perl -pi", "python - <<"]
     if "prepare.py" in command_lower and any(verb in command_lower for verb in write_verbs):
